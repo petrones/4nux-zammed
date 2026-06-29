@@ -1,0 +1,164 @@
+x-shared:
+  zammad-env: &zammad-env
+    MEMCACHE_SERVERS: zammad-memcached:11211
+    POSTGRESQL_DB: ${POSTGRESQL_DB:-zammad_production}
+    POSTGRESQL_HOST: ${POSTGRESQL_HOST:-zammad-postgresql}
+    POSTGRESQL_USER: ${POSTGRESQL_USER:-zammad}
+    POSTGRESQL_PASS: ${POSTGRESQL_PASS:?error}
+    POSTGRESQL_PORT: ${POSTGRESQL_PORT:-5432}
+    POSTGRESQL_OPTIONS: ${POSTGRESQL_OPTIONS:-?pool=50}
+    REDIS_URL: ${REDIS_URL:-redis://zammad-redis:6379}
+    TZ: ${TZ:-Europe/Rome}
+    ZAMMAD_FQDN: ${ZAMMAD_FQDN:-support.4nux.com}
+
+  zammad-depends: &zammad-depends
+    zammad-memcached:
+      condition: service_healthy
+    zammad-postgresql:
+      condition: service_healthy
+    zammad-redis:
+      condition: service_healthy
+
+services:
+  zammad-backup:
+    image: ${IMAGE_REPO:-ghcr.io/zammad/zammad}:${VERSION:-7.1.1-0000}
+    command: ["zammad-backup"]
+    restart: ${RESTART:-always}
+    environment:
+      <<: *zammad-env
+    volumes:
+      - zammad-backup:/var/tmp/zammad
+      - zammad-storage:/opt/zammad/storage
+    depends_on:
+      <<: *zammad-depends
+    user: "0:0"
+
+  zammad-elasticsearch:
+    image: elasticsearch:${ELASTICSEARCH_VERSION:-9.4.2}
+    restart: ${RESTART:-always}
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms1g -Xmx1g}
+
+  zammad-init:
+    image: ${IMAGE_REPO:-ghcr.io/zammad/zammad}:${VERSION:-7.1.1-0000}
+    command: ["zammad-init"]
+    restart: on-failure
+    environment:
+      <<: *zammad-env
+    volumes:
+      - zammad-backup:/var/tmp/zammad:ro
+      - zammad-storage:/opt/zammad/storage
+    depends_on:
+      zammad-postgresql:
+        condition: service_healthy
+    user: "0:0"
+
+  zammad-memcached:
+    image: memcached:${MEMCACHE_VERSION:-1.6.42-alpine}
+    command: memcached -m 256M
+    restart: ${RESTART:-always}
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "11211"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  zammad-nginx:
+    image: ${IMAGE_REPO:-ghcr.io/zammad/zammad}:${VERSION:-7.1.1-0000}
+    command: ["zammad-nginx"]
+    restart: ${RESTART:-always}
+    environment:
+      <<: *zammad-env
+      NGINX_PORT: 8080
+    expose:
+      - 8080
+    depends_on:
+      zammad-railsserver:
+        condition: service_healthy
+
+  zammad-postgresql:
+    image: postgres:${POSTGRES_VERSION:-17.10-alpine}
+    restart: ${RESTART:-always}
+    environment:
+      POSTGRES_DB: ${POSTGRESQL_DB:-zammad_production}
+      POSTGRES_USER: ${POSTGRESQL_USER:-zammad}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASS:?error}
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+  zammad-railsserver:
+    image: ${IMAGE_REPO:-ghcr.io/zammad/zammad}:${VERSION:-7.1.1-0000}
+    command: ["zammad-railsserver"]
+    restart: ${RESTART:-always}
+    environment:
+      <<: *zammad-env
+    volumes:
+      - zammad-backup:/var/tmp/zammad:ro
+      - zammad-storage:/opt/zammad/storage
+    depends_on:
+      <<: *zammad-depends
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:${ZAMMAD_RAILSSERVER_PORT:-3000}"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+  zammad-redis:
+    image: redis:${REDIS_VERSION:-8.8-alpine}
+    restart: ${RESTART:-always}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  zammad-scheduler:
+    image: ${IMAGE_REPO:-ghcr.io/zammad/zammad}:${VERSION:-7.1.1-0000}
+    command: ["zammad-scheduler"]
+    restart: ${RESTART:-always}
+    environment:
+      <<: *zammad-env
+    volumes:
+      - zammad-backup:/var/tmp/zammad:ro
+      - zammad-storage:/opt/zammad/storage
+    depends_on:
+      <<: *zammad-depends
+
+  zammad-websocket:
+    image: ${IMAGE_REPO:-ghcr.io/zammad/zammad}:${VERSION:-7.1.1-0000}
+    command: ["zammad-websocket"]
+    restart: ${RESTART:-always}
+    environment:
+      <<: *zammad-env
+    volumes:
+      - zammad-backup:/var/tmp/zammad:ro
+      - zammad-storage:/opt/zammad/storage
+    depends_on:
+      <<: *zammad-depends
+
+volumes:
+  elasticsearch-data:
+    driver: local
+  postgresql-data:
+    driver: local
+  redis-data:
+    driver: local
+  zammad-backup:
+    driver: local
+  zammad-storage:
+    driver: local
