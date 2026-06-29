@@ -4,7 +4,7 @@ x-shared:
     POSTGRESQL_DB: ${POSTGRESQL_DB:-zammad_production}
     POSTGRESQL_HOST: ${POSTGRESQL_HOST:-zammad-postgresql}
     POSTGRESQL_USER: ${POSTGRESQL_USER:-zammad}
-    POSTGRESQL_PASS: ${POSTGRESQL_PASS:?error}
+    POSTGRESQL_PASS: ${POSTGRESQL_PASS}
     POSTGRESQL_PORT: ${POSTGRESQL_PORT:-5432}
     POSTGRESQL_OPTIONS: ${POSTGRESQL_OPTIONS:-?pool=50}
     REDIS_URL: ${REDIS_URL:-redis://zammad-redis:6379}
@@ -86,7 +86,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRESQL_DB:-zammad_production}
       POSTGRES_USER: ${POSTGRESQL_USER:-zammad}
-      POSTGRES_PASSWORD: ${POSTGRESQL_PASS:?error}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASS}
     volumes:
       - postgresql-data:/var/lib/postgresql/data
     healthcheck:
