@@ -23,7 +23,7 @@ services:
   zammad-backup:
     image: ${IMAGE_REPO:-ghcr.io/zammad/zammad}:${VERSION:-7.1.1-0000}
     command: ["zammad-backup"]
-    restart: ${RESTART:-always}
+    restart: unless-stopped
     environment:
       <<: *zammad-env
     volumes:
